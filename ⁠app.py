@@ -1,6 +1,7 @@
 import os
 import logging
 import requests
+import asyncio
 from flask import Flask
 import threading
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -22,18 +23,28 @@ threading.Thread(target=run_web, daemon=True).start()
 
 logging.basicConfig(level=logging.INFO)
 
-CHANNEL_LINK = "https://t.me/Abu_na9r"
+# ضع معرف القناة ومعرف البوت الخاص بك هنا
+CHANNEL_USERNAME = "@Abuna9r_Ai" 
+BOT_USERNAME = "Abuna9r_Ai_bot"  # معرف البوت الخاص بك بدون @
 
 def get_main_keyboard():
     keyboard = [
         [
             InlineKeyboardButton("🚀 البدء / Start", callback_data="cmd_start"),
-            InlineKeyboardButton("📢 قناة التحديثات 🎁", url=CHANNEL_LINK)
+            InlineKeyboardButton("📢 قناة التحديثات 🎁", url="https://t.me/Abuna9r_Ai")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# --- دالة الاتصال بالذكاء الاصطناعي Gemini ---
+# زر التحويل الخاص الذي يظهر تحت منشور القناة
+def get_channel_post_keyboard():
+    keyboard = [
+        [
+            InlineKeyboardButton("💬 تحدث مع الذكاء الاصطناعي خفية", url=f"https://t.me/{BOT_USERNAME}?start=from_channel")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 def ask_gemini_ai(prompt: str) -> str:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -59,9 +70,26 @@ def ask_gemini_ai(prompt: str) -> str:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "أهلاً بك في بوت الذكاء الاصطناعي (Abuna9r—Ai)! 🤖✨\n\nأرسل لي أي سؤال، نص، أو استفسار وسأجيبك فوراً.",
+        "أهلاً بك في بوت الذكاء الاصطناعي! 🤖✨\nمحادثتك هنا خاصة ومستقلة تماماً ولا يراها أحد غيرك.\n\nتفضل بكتابة سؤالك:",
         reply_markup=get_main_keyboard()
     )
+
+# دالة نشر منشور في القناة مرفق بزر التحويل الخصي
+async def post_to_channel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text_to_send = " ".join(context.args)
+    if not text_to_send:
+        await update.message.reply_text("❌ اكتب النص بعد الأمر، مثال:\n`/post أهلاً بكم! اضغط على الزر للحديث مع الذكاء الاصطناعي بشكل خاص.`", parse_mode="Markdown")
+        return
+
+    try:
+        await context.bot.send_message(
+            chat_id=CHANNEL_USERNAME, 
+            text=text_to_send, 
+            reply_markup=get_channel_post_keyboard()
+        )
+        await update.message.reply_text("✅ تم نشر المنشور مع زر المحادثة الخاصة في القناة!")
+    except Exception as e:
+        await update.message.reply_text(f"❌ فشل النشر في القناة. التأكد من أن البوت مشرف في القناة.\nالخطأ: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text.strip()
@@ -75,7 +103,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await query.answer()
 
     if query.data == "cmd_start":
-        await query.message.reply_text("أهلاً بك! تفضل بكتابة سؤالك وسأجيبك مباشرة.", reply_markup=get_main_keyboard())
+        await query.message.reply_text("أهلاً بك! اكتب سؤالك هنا وسأجيبك فوراً.", reply_markup=get_main_keyboard())
 
 def main():
     token = os.environ.get("BOT_TOKEN")
@@ -86,6 +114,7 @@ def main():
     application = Application.builder().token(token).build()
 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("post", post_to_channel))
     application.add_handler(CallbackQueryHandler(button_click))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
